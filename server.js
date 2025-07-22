@@ -92,8 +92,8 @@ function generateResponse(userMessage) {
   return responses['default'];
 }
 
-// Webhook endpoint for receiving WhatsApp messages
-app.post('/webhook', (req, res) => {
+// Function to handle incoming WhatsApp messages
+function handleIncomingMessage(req, res) {
   console.log('📱 Incoming message:', req.body);
   
   const incomingMessage = req.body.Body;
@@ -132,6 +132,15 @@ app.post('/webhook', (req, res) => {
       }
       res.status(500).send('Error sending message');
     });
+}
+
+// Webhook endpoint for receiving WhatsApp messages
+app.post('/webhook', handleIncomingMessage);
+
+// Also handle webhook at root path (in case Twilio is configured to post to /)
+app.post('/', (req, res) => {
+  console.log('📱 Webhook received at root path "/" - processing message');
+  handleIncomingMessage(req, res);
 });
 
 // Health check endpoint
