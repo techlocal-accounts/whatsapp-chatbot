@@ -10,10 +10,34 @@ const port = process.env.PORT || 3000;
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 
-// Twilio credentials
+// Twilio credentials with validation
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
+
+// Debug: Check if credentials are loaded (don't log full values for security)
+console.log('🔍 Environment check:');
+console.log('TWILIO_ACCOUNT_SID:', accountSid ? `Set (${accountSid.substring(0, 8)}...)` : 'NOT SET');
+console.log('TWILIO_AUTH_TOKEN:', authToken ? `Set (${authToken.substring(0, 8)}...)` : 'NOT SET');
+
+// Validate credentials before creating client
+if (!accountSid || !authToken) {
+  console.error('❌ Missing Twilio credentials! Please set TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN environment variables.');
+  process.exit(1);
+}
+
 const client = twilio(accountSid, authToken);
+
+// Validate Twilio client on startup
+console.log('🔧 Testing Twilio connection...');
+client.api.accounts(accountSid)
+  .fetch()
+  .then(account => {
+    console.log('✅ Twilio connection successful! Account:', account.friendlyName);
+  })
+  .catch(err => {
+    console.error('❌ Twilio connection failed:', err.message);
+    console.error('   Please check your TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN');
+  });
 
 // Simple chatbot responses
 const responses = {
@@ -70,14 +94,22 @@ function generateResponse(userMessage) {
 
 // Webhook endpoint for receiving WhatsApp messages
 app.post('/webhook', (req, res) => {
-  console.log('Incoming message:', req.body);
+  console.log('📱 Incoming message:', req.body);
   
   const incomingMessage = req.body.Body;
   const from = req.body.From;
   const to = req.body.To;
   
+  // Validate required fields
+  if (!incomingMessage || !from || !to) {
+    console.error('❌ Missing required fields in webhook payload');
+    return res.status(400).send('Missing required fields');
+  }
+  
   // Generate response
   const botResponse = generateResponse(incomingMessage);
+  
+  console.log(`🤖 Sending response to ${from}: "${botResponse}"`);
   
   // Send response back to WhatsApp
   client.messages
@@ -87,11 +119,17 @@ app.post('/webhook', (req, res) => {
       to: from  // This is the user's WhatsApp number
     })
     .then(message => {
-      console.log('Message sent:', message.sid);
+      console.log('✅ Message sent successfully! SID:', message.sid);
       res.status(200).send('Message sent');
     })
     .catch(error => {
-      console.error('Error sending message:', error);
+      console.error('❌ Error sending message:', error);
+      console.error('   Status:', error.status);
+      console.error('   Code:', error.code);
+      console.error('   Message:', error.message);
+      if (error.moreInfo) {
+        console.error('   More info:', error.moreInfo);
+      }
       res.status(500).send('Error sending message');
     });
 });
